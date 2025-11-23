@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 MindMesh - AI Idea Organizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+    const organizeUrl = "http://localhost:5000/organize";
+    const mindmapUrl = "http://localhost:5000/mindmap";
+
+    const organizeButton = document.getElementById('organizeButton');
+    const brainDumpInput = document.getElementById('brainDumpInput');
+    const clustersOutput = document.getElementById('clustersOutput');
+    const mindMapOutput = document.getElementById('mindMapOutput');
+    const loadingModal = document.getElementById('loadingModal');
+
+    organizeButton.addEventListener('click', async () => {
+        const brainDumpText = brainDumpInput.value;
+        if (!brainDumpText.trim()) {
+            clustersOutput.innerHTML = '<p class="text-yellow-400">Enter some ideas first!</p>';
+            return;
+        }
+
+        loadingModal.classList.remove('hidden');
+
+        try {
+            // Step 1: Organized clusters
+            const resClusters = await fetch(organizeUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: brainDumpText })
+            });
+
+            const structuredData = await resClusters.json();
+            displayConnectedThoughts(structuredData);
+
+            // Step 2: Generate mindmap from clusters
+            const resMindMap = await fetch(mindmapUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ structured: structuredData })
+            });
+
+            const mindMapData = await resMindMap.json();
+            displayMindMap(mindMapData);
+
+        } catch (error) {
+            console.error(error);
+            clustersOutput.innerHTML = '<p class="text-red-400">⚠ Error organizing thoughts.</p>';
+        }
+
+        loadingModal.classList.add('hidden');
+    });
+
+    function displayConnectedThoughts(data) {
+        clustersOutput.innerHTML = `
+            <h3 class="font-semibold mb-2 text-indigo-400">Categories:</h3>
+            <ul class="list-disc list-inside text-gray-300 mb-4">
+                ${data.categories.map(c => `<li>${c}</li>`).join("")}
+            </ul>
+            <h3 class="font-semibold mb-2 text-indigo-400">Connections:</h3>
+            <ul class="list-disc list-inside text-gray-300">
+                ${data.connections.map(conn => `<li>${conn}</li>`).join("")}
+            </ul>
+        `;
+    }
+
+    
+function displayMindMap(data) {
+    mindMapOutput.innerHTML = generateMindMapHTML(data);
+    enableDragAndDrop();
+}
+
+    
+    function enableDragAndDrop() {
+    document.querySelectorAll('#mindMapOutput span').forEach(node => {
+        node.setAttribute('draggable', true);
+
+        node.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', e.target.textContent);
+            e.target.classList.add('opacity-50');
+        });
+
+        node.addEventListener('dragend', (e) => {
+            e.target.classList.remove('opacity-50');
+        });
+
+        node.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.target.classList.add('ring-2', 'ring-indigo-400');
+        });
+
+        node.addEventListener('dragleave', (e) => {
+            e.target.classList.remove('ring-2', 'ring-indigo-400');
+        });
+
+        node.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.target.classList.remove('ring-2', 'ring-indigo-400');
+
+            const draggedText = e.dataTransfer.getData('text/plain');
+            const newChild = document.createElement('li');
+            
+            newChild.innerHTML = `<span>${draggedText}</span>`;
+
+            let ul = e.target.parentElement.querySelector('ul');
+            if (!ul) {
+                ul = document.createElement('ul');
+                e.target.parentElement.appendChild(ul);
+            }
+            ul.appendChild(newChild);
+        });
+    });
+}
+
+
+    function generateMindMapHTML(nodeData) {
+        const buildTree = (nodes, parent) =>
+            nodes
+                .filter(n => n.parent === parent)
+                .map(n => `
+                    <li>
+                        <span>${n.label}</span>
+                        ${buildTree(nodes, n.id).length ? `<ul>${buildTree(nodes, n.id)}</ul>` : ""}
+                    </li>
+                `)
+                .join("");
+
+        return `<ul class="mind-map">
+            <li><span>${nodeData.root}</span>
+                <ul>${buildTree(nodeData.nodes, null)}</ul>
+            </li>
+        </ul>`;
+    }
+</script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .mind-map { padding: 0; list-style: none; }
+        .mind-map ul { padding-left: 24px; list-style: none; position: relative; }
+        .mind-map li { position: relative; padding: 8px 0 8px 16px; }
+        .mind-map li::before, .mind-map li::after { content: ''; position: absolute; left: 0; }
+        .mind-map li::before { border-left: 2px solid #4b5563; height: 100%; top: 0; width: 1px; }
+        .mind-map li:first-child::before { top: 50%; height: 50%; }
+        .mind-map li:last-child::before { height: 50%; }
+        .mind-map li::after { border-top: 2px solid #4b5563; height: 1px; top: 50%; width: 16px; }
+        .mind-map > li::before { border-left: none; }
+        .mind-map span {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #374151;
+            border: 1px solid #4b5563;
+            color: white;
+            border-radius: 8px;
+            transition: all 0.2s ease-in-out;
+        }
+        .mind-map span:hover { transform: scale(1.03); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .mind-map > li > span { background-color: #4f46e5; font-weight: 600; }
+        .mind-map > li > ul > li > span { background-color: #1d4ed8; }
+        .mind-map > li > ul > li > ul > li > span { background-color: #1e40af; font-size: 0.9rem; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-full flex flex-col">
+    <header class="bg-gray-800 shadow-md">
+        <div class="container mx-auto px-4 py-4">
+            <h1 class="text-3xl font-bold text-white flex items-center">
+                <span class="text-3xl mr-3">🧠</span> MindMesh
+            </h1>
+            <p class="mt-1 text-gray-300">Turn your messy thoughts into structured projects.</p>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <section class="flex flex-col">
+            <h2 class="text-2xl font-semibold mb-4">✍️ Brain Dump</h2>
+            <textarea id="brainDumpInput"
+                class="w-full flex-grow p-4 bg-gray-800 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                rows="15" placeholder="Type your ideas here..."></textarea>
+            <button id="organizeButton"
+                class="mt-4 w-full bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none">
+                Organize Ideas
+            </button>
+        </section>
+
+        <section class="flex flex-col space-y-8">
+            <div>
+                <h2 class="text-2xl font-semibold mb-4">🔗 Connected Thoughts</h2>
+                <div id="clustersOutput" class="w-full h-64 p-4 bg-gray-800 border border-gray-700 rounded-lg overflow-y-auto">
+                    <p class="text-gray-400">Your organized ideas and connections will appear here...</p>
+                </div>
+            </div>
+            <div>
+                <h2 class="text-2xl font-semibold mb-4">📂 Mind Map Visualization</h2>
+                <div id="mindMapOutput" class="w-full h-96 p-4 bg-gray-800 border border-gray-700 rounded-lg overflow-y-auto">
+                    <p class="text-gray-400">Your visual mind map will be generated here...</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="loadingModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="flex flex-col items-center">
+            <svg class="animate-spin h-10 w-10 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.37 0 0 5.37 0 12h4z"></path>
+            </svg>
+            <p class="text-white text-lg mt-4">Organizing your thoughts...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        const apiUrl = "/api/organize";
+        const organizeButton = document.getElementById('organizeButton');
+        const brainDumpInput = document.getElementById('brainDumpInput');
+        const clustersOutput = document.getElementById('clustersOutput');
+        const mindMapOutput = document.getElementById('mindMapOutput');
+        const loadingModal = document.getElementById('loadingModal');
+
+        organizeButton.addEventListener('click', async () => {
+            const brainDumpText = brainDumpInput.value;
+            if (!brainDumpText.trim()) {
+                clustersOutput.innerHTML = '<p class="text-yellow-400">Please enter some ideas to organize.</p>';
+                mindMapOutput.innerHTML = '<p class="text-yellow-400">Please enter some ideas to organize.</p>';
+                return;
+            }
+
+            loadingModal.classList.remove('hidden');
+            const response = await fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: brainDumpText })
+            });
+
+            const data = await response.json();
+            loadingModal.classList.add('hidden');
+            clustersOutput.textContent = JSON.stringify(data, null, 2);
+        });
+    </script>
+</body>
+</html>
